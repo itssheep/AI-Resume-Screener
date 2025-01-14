@@ -572,7 +572,7 @@ def main():
         None
     """
 
-    # Allow access to all variables that need to be read in other functions. They are never written in other functions and im too lazy to modify args for pbv.
+    # Allow access to all variables that need to be read in other functions.
     global root, api_key, listbox, userCriteria, strengthSlider 
 
     # Check for API key    
