@@ -353,6 +353,10 @@ def parseType(filePath):
     docType = parts[0] # Resume or coverletter
     nameKey = parts[1] # Name
 
+    if nameKey.count('-') > 1: # If the person has a middle hyphenated name (this took me forever to debug)
+        nameParts = nameKey.split('-')
+        nameKey = f"{nameParts[0]}-{nameParts[-1]}"
+        
     return docType, nameKey
 
 
