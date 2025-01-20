@@ -1,9 +1,9 @@
 import tkinter as tk
 from tkinter import messagebox, filedialog, ttk
+from pdfminer.high_level import extract_text
 import webbrowser
 import os
 import json
-import pymupdf
 import sys
 import threading
 import re
@@ -317,18 +317,14 @@ def pdfToPlaintext(file_path):
     Returns:
         str: Extracted plaintext or None if the PDF cannot be processed.
     """
-
-    text = ""
-    
     try:
-        if file_path is None: # Ensure file path is provided
+        if file_path is None:  # Ensure file path is provided
             return None
         
-        with pymupdf.open(file_path) as document:
-            for page in document:
-                text += page.get_text()
+        # Extract text from the PDF file using pdfminer
+        text = extract_text(file_path)
         
-        return text
+        return text.strip() if text else None
     
     except Exception as e:
         handleError(411, e)
