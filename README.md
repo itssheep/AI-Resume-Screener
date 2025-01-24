@@ -1,7 +1,7 @@
 # CV-Screener
 A CV Screener using OpenAI API that I solely developed and created at BrightIsle in January 2025
 
-*This application is meant to be packaged using pyinstaller and ran as a .exe so if you attempt to run it in an IDE it may produce errors.*
+*This program depends on the file naming schema [Resume/CoverLetter]_[First]-[Last]_[Source].pdf because that's how they are downloaded at brightisle*
 
 How to add your OpenAI API key:
 1. On the first run, a file named config.json will be created in the directory: C:\Users\YOURNAME\AppData\Roaming\BrightIsle CV Screener
