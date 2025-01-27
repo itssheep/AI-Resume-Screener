@@ -9,9 +9,9 @@ import threading
 import re
 from datetime import datetime
 import pandas as pd
-import ai
+import ai, mail
 
-# Directories and file locations
+
 APP_NAME = "BrightIsle CV Screener"
 APPDATA_DIR = os.path.join(os.getenv("APPDATA"), APP_NAME)
 CONFIG_FILE = os.path.join(APPDATA_DIR, "config.json")
@@ -26,12 +26,13 @@ def drop(event=None):
         event: event (None)
     """
 
+    # Inserts files into the listbox
     def insertFile(fileList): 
         for file in fileList:
             if file.endswith('.pdf'):
                 if file not in addedFiles: # check for duplicates
                     listbox.insert(tk.END, file)
-                    addedFiles.add(file)
+                    addedFiles.add(file) 
                 else:
                     messagebox.showinfo("Duplicate File", f"{os.path.basename(file)} is already in the dropbox.")
             else:
@@ -39,16 +40,15 @@ def drop(event=None):
 
     addedFiles = set()
 
-    if event is None: # Double click case
+    if event is None: # If the user double clicks
         files = filedialog.askopenfilenames(
             title="Select .pdf Files",
             filetypes=[("PDF Files", "*.pdf")],
         )
 
-        if files:
+        if files: # If files are valid
             insertFile(files)
     return
-
 
 def delete(event=None):
     """
@@ -58,11 +58,10 @@ def delete(event=None):
         event: Event object (optional).
     """
 
-    items = listbox.curselection()
-    for i in reversed(items):
+    items = listbox.curselection() # Grab selected file
+    for i in reversed(items): 
         listbox.delete(i)                
     return
-
 
 def getPackagedPath(filename):
     """
@@ -74,24 +73,22 @@ def getPackagedPath(filename):
     Returns:
         str: Path to the file.
     """
-    if hasattr(sys, '_MEIPASS'):
+    if hasattr(sys, '_MEIPASS'): # checks for sys attribute and grabs file packaged with pyinstaller
         return os.path.join(sys._MEIPASS, filename)
     else:
-        return os.path.join(os.path.dirname(__file__), filename)
-
+        return os.path.join(os.path.dirname(__file__), filename) # For VSCODE testing
 
 def readme():
     """
     Opens the README.md file in the default web browser.
     """
-    readme_path = os.path.join(APPDATA_DIR, "README.md") # Find absolute path of the file
+    readme_path = os.path.join(APPDATA_DIR, "README.md") # Get file location
     
-    if os.path.exists(readme_path):
+    if os.path.exists(readme_path): # If it's found
         webbrowser.open(f"file://{readme_path}")
     else: # if the file cannot be found
         handleError(410)
     return
-
 
 def runAI(resume, coverletter, name):
     """
@@ -104,33 +101,33 @@ def runAI(resume, coverletter, name):
     Returns:
         str: Output from the AI script, or None if an error occurs.
     """
-
-    criteria = userCriteria.get("1.0", tk.END).strip()
-    strength = str(strengthSlider.get())
-
-    if not criteria:
-        handleError(404)
-        return
-
-    if resume is None:
-        resume = "None"
-
-    elif coverletter is None:
-        coverletter = "None"
-
-    # Ensure API key is set again just in case
-        
-    if not api_key:
-        handleError(402)
-        closeApp(root)
-
     try:
-        result = ai.main(name, resume, coverletter, criteria, strength)
+        criteria = userCriteria.get("1.0", tk.END).strip() # Get criteria from textbox
+        strength = str(strengthSlider.get()) # Get strength from slider and turn into a string
+        
+            
+        if not criteria: # Make sure the criteria is not falsy
+            handleError(404)
+            return
 
-        return result
+        if resume is None: # Submitting a null value to the ai will cause an error. it needs to be a string
+            resume = "None"
+
+        elif coverletter is None: # Same as resume
+            coverletter = "None"
+            
+        if not api_key: # Ensure api key is set for safety purposes
+            handleError(402)
+            closeApp(root)
+
+        try:
+            result = ai.main(name, resume, coverletter, criteria, strength) # Get result of AI script
+            return result
+        
+        except Exception as e:
+            logError(e)
     except Exception as e:
-        handleError(999, e)
-
+        logError(e)
 
 def gatherPairs():
     """
@@ -138,22 +135,21 @@ def gatherPairs():
     """
     pairs = {}
 
-    for i in range(listbox.size()):
-        filePath = listbox.get(i)
-        docType, nameKey = parseType(filePath)
+    for i in range(listbox.size()): 
+        filePath = listbox.get(i) # Grab ith file path
+        docType, nameKey = parseType(filePath) # unpack tuple into type (resume/coverletter) and name
 
-        if nameKey not in pairs:
+        if nameKey not in pairs: # If its a new name create a new dictionary entry
             pairs[nameKey] = {"Resume": None, "CoverLetter": None}
 
-        if docType == "Resume":
+        if docType == "Resume": # If the name is in the dictionary edit the resume key to be the file path to the resume
             pairs[nameKey]["Resume"] = filePath
-        elif docType == "CoverLetter":
+        elif docType == "CoverLetter": # Same as above but with coverletter (capital L is important)
             pairs[nameKey]["CoverLetter"] = filePath
-        else:
-            pass
-    
-    return pairs
+        else: # else a weird glitch happened and we should skip this file
+            continue
 
+    return pairs
 
 def handleError(err, e=None): 
     """
@@ -169,7 +165,7 @@ def handleError(err, e=None):
         401 : "Only PDF files are allowed.",
         402 : "API key missing in config.json. Click Help for help.",
         403 : "Config file is not a valid JSON. Delete the file and try again.",
-        404 : "Criteria was not entered.",
+        404 : "Please enter a valid criteria before proceeding.",
         405 : "The application encountered a network issue. Please check your internet and try again.",
         406 : "Rate limit hit. Please wait before submitting a new request",
         407 : "Quota exceeded. Please contact support",
@@ -184,21 +180,19 @@ def handleError(err, e=None):
     logError(e)
     messagebox.showerror("Error", message)
     
-
 def openLog(): 
     """
     Opens the log file for debugging purposes.
     """
 
     try:
-        file = os.path.join(APPDATA_DIR, "log.txt")
+        file = os.path.join(APPDATA_DIR, "log.txt") # Find log file in appdata dir
         if os.path.exists(file):
             os.startfile(file)
 
     except Exception as e: # this is necessary as if its on another OS the file variable line will create an error.
         handleError(400, e)
     return
-
 
 def checkConfig():
     """
@@ -208,19 +202,19 @@ def checkConfig():
         str: API key 
     """
 
-    os.makedirs(APPDATA_DIR, exist_ok=True)
+    os.makedirs(APPDATA_DIR, exist_ok=True) # Create appdata directory
 
     if not os.path.exists(CONFIG_FILE):
         # First run: Create the config & log file and prompt user to set up their API key.
         with open(CONFIG_FILE, "w") as file:
-            json.dump({"OPENAI_API_KEY": ""}, file)
+            json.dump({"OPENAI_API_KEY": ""}, file) # dump our json contents into config
             
-        logFile = os.path.join(APPDATA_DIR, "log.txt")
-        with open(logFile, "w") as log:
+        logFile = os.path.join(APPDATA_DIR, "log.txt") # Create log file
+        with open(logFile, "w") as log: # Default write-to log
             log.write("Error log file, for developer use.\n")
 
-        readmeDest = os.path.join(APPDATA_DIR, "README.md") 
-        readmeSRC = getPackagedPath("README.md")
+        readmeDest = os.path.join(APPDATA_DIR, "README.md") # readme dest
+        readmeSRC = getPackagedPath("README.md") # unpack file
         with open(readmeSRC, "r", encoding="utf-8") as src, open(readmeDest, "w", encoding="utf-8") as dest:
             dest.write(src.read())
 
@@ -231,65 +225,68 @@ def checkConfig():
         with open(CONFIG_FILE, "r") as file:
             try:
                 config = json.load(file)
-                api_key = config.get("OPENAI_API_KEY", "").strip()
+                api_key = config.get("OPENAI_API_KEY", "").strip() # read api key from json
                 if not api_key: # ensure api key is there
                     handleError(402)
                     return 
                 return api_key
-            except json.JSONDecodeError:
+            except json.JSONDecodeError: # if json cannot be loaded show an error
                 handleError(403)
                 return 
-
 
 def run():
     """
     Executes the resume screening process for all files in the listbox.
     """
+    # Helper function to process files
     def processFiles():
-        allOut = []
+        allOut = [] 
         allPaths = []
-
         for nameKey, docs in pairs.items():
             
-            resumePath = docs.get("Resume")
-            coverPath = docs.get("CoverLetter")
+            resumePath = docs.get("Resume") # Grab file path (value) from Resume (key) in dict
+            coverPath = docs.get("CoverLetter") # Grab file path (value) from CoverLetter (key) in dict
 
             if not resumePath and not coverPath: # if both are somehow missing, skip the entry
                 continue
 
-            resumeText = pdfToPlaintext(resumePath) 
+            resumeText = pdfToPlaintext(resumePath) # Grab the text from the pdfs and turn into string plaintext
             coverText = pdfToPlaintext(coverPath) 
-
-            if (not resumeText or resumeText.strip() == "") and (not coverText or coverText.strip() == ""):
+            
+            if (not resumeText or resumeText.strip() == "") and (not coverText or coverText.strip() == ""): # Ensure plaintext is not falsy
                 continue
 
             try:
-                output = runAI(resumeText, coverText, nameKey)
-                if output is None:
+                
+                output = runAI(resumeText, coverText, nameKey) # run AI 
+                if output is None: # Ensure output is not falsy
                     continue
-
-                allOut.append(output)
-                allPaths.append((nameKey, resumePath, coverPath))
-
+                
+                allOut.append(output) # append output to list
+                allPaths.append((nameKey, resumePath, coverPath)) # append path info as tuple
+                
             except Exception:
                 loadingWindow.destroy()
                 handleError(999)
                 root.destroy()
                 return
 
-        loadingWindow.destroy()
-        showResultWindow(allOut, allPaths)
+        loadingWindow.destroy() # destroy loading bar
+        showResultWindow(allOut, allPaths) # open results window
 
     
     if listbox.size() == 0: # Make sure there are files in the listbox to process
         handleError(409)
         return 
     
-    loadingWindow = showLoadingBar()
-    pairs = gatherPairs()
-
-    threading.Thread(target=processFiles).start()
+    if not userCriteria.get("1.0", tk.END).strip():
+        handleError(404)
+        return
     
+    loadingWindow = showLoadingBar() # open loading bar
+    pairs = gatherPairs() # create dictionary
+
+    threading.Thread(target=processFiles).start() # New thread for processing so GUI doesn't crash
 
 def logError(error):
     """
@@ -305,8 +302,7 @@ def logError(error):
     with open(LOG_FILE, "a") as file:
         file.write(f"\n[{timestamp}] Error: {error}\n")
     return
-
-    
+  
 def pdfToPlaintext(file_path):
     """
     Converts a PDF file to plaintext.
@@ -330,7 +326,6 @@ def pdfToPlaintext(file_path):
         handleError(411, e)
         return None
 
-
 def parseType(filePath):
     """
     Given some file path, parses the type of file and matches to the other.
@@ -339,29 +334,34 @@ def parseType(filePath):
         docType   "Resume" or "Coverletter"
         nameKey   "name of person" (for dictionary key)
     """
-    filename = os.path.basename(filePath)
-    base, ext = os.path.splitext(filename)
+    filename = os.path.basename(filePath) 
+    base, _ = os.path.splitext(filename) # unpack tuple to grab full filename 
     parts = base.split("_", 2) # Splits to ["Type", "First-Last", "GetHired"]
 
-    if len(parts) < 2: # If filename is invalid
+    if len(parts) < 2: # If filename is invalid handle gracefully
         return ("Unknown", "Unknown")
     
     docType = parts[0] # Resume or coverletter
     nameKey = parts[1] # Name
 
     if nameKey.count('-') > 1: # If the person has a middle hyphenated name (this took me forever to debug)
-        nameParts = nameKey.split('-')
-        nameKey = f"{nameParts[0]}-{nameParts[-1]}"
-        
-    return docType, nameKey
+        nameParts = nameKey.split('-') # Split by the -
+        nameKey = f"{nameParts[0]}-{nameParts[-1]}" # Grab first and last entry (first and last names). 
+        # This is not the best solution, i.e for names like Anna o'Keefe it shows it as Anna-O-Keefe which will simplify to Anna Keefe in the program.
+        # I cannot figure out a better one. 
 
+    return docType, nameKey
 
 def closeApp(thread):
     """Ensures proper cleanup of application"""
-    thread.destroy()
-    if thread == root:
-        sys.exit(0)
-
+    try:
+        if thread == resultWindow: # Will cause an error if resultWindow hasn't been created yet, so we must try/except it.
+            root.deiconify()
+    except Exception: 
+        if thread == root: # If its root, exit the system so no memory leaks
+            sys.exit(0)
+    finally: # Any other window and we just destroy the passed thread.
+        thread.destroy()
 
 def showLoadingBar():
     """
@@ -371,11 +371,12 @@ def showLoadingBar():
         tk.Toplevel: The loading bar window.
     """
 
-    loadingWindow = tk.Toplevel(root)
-    loadingWindow.title("Processing")
-    loadingWindow.geometry("300x100")
-    loadingWindow.resizable(False, False)
-    loadingWindow.protocol("WM_DELETE_WINDOW", lambda: None)
+    loadingWindow = tk.Toplevel(root) # Create new toplevel window on root
+    loadingWindow.title("Processing") # Name of window
+    loadingWindow.geometry("300x100") # Size of window
+    loadingWindow.resizable(False, False) # not resizeable in x or y direction
+    loadingWindow.protocol("WM_DELETE_WINDOW", lambda: None) # Don't let the user close it.
+    root.withdraw()
 
     try:
         # Get the absolute path to the .ico file
@@ -384,14 +385,14 @@ def showLoadingBar():
     except Exception:
         pass # Fallback to default tkinter icon if brightisle icon cant be found
 
-    label = tk.Label(loadingWindow, text="Screening in progress. Please wait...")
-    label.pack(pady=10)
+    label = tk.Label(loadingWindow, text="Processing...") # Processing text
+    label.pack(pady=10) # Add y dir padding to label
 
-    progress = ttk.Progressbar(loadingWindow, mode="indeterminate")
-    progress.pack(pady=10, padx=10, fill="x")
-    progress.start()
+    progress = ttk.Progressbar(loadingWindow, mode="indeterminate") # Create loading bar
+    progress.pack(pady=10, padx=10, fill="x") # Add padding 
+    progress.start() # Start loading bar
+
     return loadingWindow
-
 
 def showResultWindow(result, file):
     """
@@ -401,7 +402,7 @@ def showResultWindow(result, file):
         result (list): List of string AI output.
         file (list): List of tuples of file paths that correspond to each output.
     """
-
+    global resultWindow
     # New window
     resultWindow = tk.Toplevel()
     resultWindow.title("Screening Results")
@@ -466,26 +467,34 @@ def showResultWindow(result, file):
     # Function to export listbox data to Excel
     def export_to_excel():
         data = []
-        for score, preview, aioutput, _, _ in results:
+        for _, preview, aioutput, _, _ in results:
             name, score_str, approval = preview.split(" | ")
             rationale = aioutput.strip()
-            data.append([name, score_str, approval, rationale])
+            data.append([name, score_str, approval, rationale]) # Grab all data from output and add to list
 
-        df = pd.DataFrame(data, columns=["Name", "Score", "Approval", "Rationale"])
-        save_path = filedialog.asksaveasfilename(
+        df = pd.DataFrame(data, columns=["Name", "Score", "Approval", "Rationale"]) # Add to excel file using pandas
+        save_path = filedialog.asksaveasfilename( # open file dialog to save
             defaultextension=".xlsx",
             filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],
         )
-        if save_path:
+        if save_path: # If the file is saved
             df.to_excel(save_path, index=False)
             messagebox.showinfo("Export Successful", f"Results exported to {save_path}")
 
     # Function to show detailed view with buttons
     def showDetails(event):
+        
+        # Helper function to open file on button press.
+        def openFile(filePath, fileType):
+            if filePath and os.path.exists(filePath):
+                os.startfile(filePath)
+            else:
+                messagebox.showinfo("File Not Found", f"{fileType} file could not be found.")
+
         selected = resultsListbox.curselection()
         if selected:
-            preview = resultsListbox.get(selected[0])
-            detailed, resumePath, coverPath = details_map.get(preview, ("Details not found.", None, None))
+            preview = resultsListbox.get(selected[0]) # get current selected item
+            detailed, resumePath, coverPath = details_map.get(preview, ("Details not found.", None, None)) # get details from dictionary
 
             # Create a detailed view window
             detailWindow = tk.Toplevel(resultWindow)
@@ -518,22 +527,12 @@ def showResultWindow(result, file):
             buttonFrame = tk.Frame(detailWindow)
             buttonFrame.pack(pady=10)
 
-            def open_file(filePath, fileType):
-                if filePath and os.path.exists(filePath):
-                    os.startfile(filePath)
-                else:
-                    messagebox.showinfo("File Not Found", f"{fileType} file could not be found.")
-
             # Open Resume button
-            openResumeButton = tk.Button(
-                buttonFrame, text="Open Resume", command=lambda: open_file(resumePath, "Resume")
-            )
+            openResumeButton = tk.Button(buttonFrame, text="Open Resume", command=lambda: openFile(resumePath, "Resume"))
             openResumeButton.pack(side="left", padx=10)
 
             # Open Coverletter button
-            openCoverletterButton = tk.Button(
-                buttonFrame, text="Open Coverletter", command=lambda: open_file(coverPath, "Coverletter")
-            )
+            openCoverletterButton = tk.Button(buttonFrame, text="Open Coverletter", command=lambda: openFile(coverPath, "Coverletter"))
             openCoverletterButton.pack(side="left", padx=10)
 
     # Add Export button at the bottom-right corner of the main results window
@@ -544,7 +543,51 @@ def showResultWindow(result, file):
     resultsListbox.bind("<Double-1>", showDetails)
     resultsListbox.bind("<Return>", showDetails)
 
+def getMail():
+    """
+    Opens mail window to allow user to automatically download resumes and coverletters.
+    """
+    global mailWindow
+    mailWindow = tk.Toplevel()
+    mailWindow.geometry("300x250")
+    mailWindow.resizable(False, False)
+    mailWindow.protocol("WM_DELETE_WINDOW", lambda: closeApp(mailWindow))
+    
+    try:
+        # Get the absolute path to the .ico file
+        iconPath = getPackagedPath("icon.ico")
+        mailWindow.iconbitmap(iconPath)
+    except Exception:
+        pass # Fallback to default tkinter icon if brightisle icon cant be found
+    
+    # Label to tell user where to share payworks candidates
+    emailLabel = tk.Label(mailWindow, text="Share email: ai@brightisle.ca\n Enter identifier below")
+    emailLabel.pack(pady=5)
 
+    # Textbox for identifier
+    textbox = tk.Text(mailWindow, width=25, height=7)
+    textbox.pack(pady=5, padx=10, side="top")
+
+    # Button to start download
+    downloadButton = tk.Button(mailWindow, text="Download", command=lambda: execMail(textbox))
+    downloadButton.pack(pady=5, padx=10, side="bottom")
+
+def execMail(textbox):
+    """
+    Starts the process of downloading files
+
+    Args: textbox (tkinter.Text obj)
+    """
+    def runmail():
+        mail.main(identifier) # Run mail script with identifier
+        closeApp(loading)
+        closeApp(mailWindow)
+        messagebox.showinfo("Success", "Resumes and Coverletters can be found in your downloads folder.")
+
+    identifier = textbox.get("1.0", tk.END).strip() # get identifier from textbox
+    loading = showLoadingBar() # Show processing loading bar
+    threading.Thread(target=runmail).start() # Start in new thread so GUI doesnt crash
+    
 def main():
     """
     Initialize and launch the BrightIsle CV Screener application.
@@ -572,7 +615,7 @@ def main():
         None
     """
 
-    # Allow access to all variables that need to be read in other functions.
+    # Allow access to all variables that need to be read in other functions. They are never written in other functions and im too lazy to modify args for pbv.
     global root, api_key, listbox, userCriteria, strengthSlider 
 
     # Check for API key    
@@ -608,7 +651,7 @@ def main():
     userCriteria.grid(column=0, row=5, padx=5, pady=5, sticky="w")
 
     # Add a label for the DnD box
-    dropLabel = tk.Label(frame, text="Drop PDF files here")
+    dropLabel = tk.Label(frame, text="Double click to add PDF files")
     dropLabel.grid(column=0, row=2, padx=5, pady=5, sticky="sw")
 
     # Create listbox to drop resumes into
@@ -641,6 +684,10 @@ def main():
     # Add Log button
     logButton = tk.Button(frame, text="Log", command=openLog)
     logButton.grid(column=3, row=0, sticky='nw')
+
+    # Add mail button
+    mailButton = tk.Button(frame, text="Mail", command=getMail)
+    mailButton.grid(column=0, row=0, sticky='nw')
 
     # Configure rows and columns inside the frame
     frame.grid_rowconfigure(0, weight=1)
