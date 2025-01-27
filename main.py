@@ -9,7 +9,7 @@ import threading
 import re
 from datetime import datetime
 import pandas as pd
-import ai, mail
+import ai
 
 
 APP_NAME = "BrightIsle CV Screener"
@@ -17,6 +17,37 @@ APPDATA_DIR = os.path.join(os.getenv("APPDATA"), APP_NAME)
 CONFIG_FILE = os.path.join(APPDATA_DIR, "config.json")
 LOG_FILE = os.path.join(APPDATA_DIR, "log.txt")
 
+
+class Window(tk.Tk):
+    def __init__(self, title="None", geometry="600x400", close=True, parent=None, isRoot=False):
+        super().__init__()
+        self.wm_title(title)
+        self.wm_geometry(geometry)
+        self.wm_resizable(False, False)
+        self.parent = parent
+        self.isRoot = isRoot
+
+        if close:
+            self.wm_protocol("WM_DELETE_WINDOW", self.closeApp)
+
+        else:
+            self.wm_protocol("WM_DELETE_WINDOW", lambda: None)
+
+        try:
+            #Get the absolute path to the .ico file
+            iconPath = getPackagedPath("icon.ico")
+            self.iconbitmap(iconPath)
+        except Exception:
+            pass # Fallback to default tkinter icon if brightisle icon cant be found
+    
+    def closeApp(self):
+        if self.isRoot:
+            sys.exit(0)
+        elif self.parent:
+            self.parent.deiconify()
+            self.destroy()
+        else:
+            self.destroy()
 
 def drop(event=None):
     """
@@ -63,21 +94,6 @@ def delete(event=None):
         listbox.delete(i)                
     return
 
-def getPackagedPath(filename):
-    """
-    Gets the path of a file packaged with the application.
-
-    Args:
-        filename (str): Name of the file.
-
-    Returns:
-        str: Path to the file.
-    """
-    if hasattr(sys, '_MEIPASS'): # checks for sys attribute and grabs file packaged with pyinstaller
-        return os.path.join(sys._MEIPASS, filename)
-    else:
-        return os.path.join(os.path.dirname(__file__), filename) # For VSCODE testing
-
 def readme():
     """
     Opens the README.md file in the default web browser.
@@ -89,6 +105,8 @@ def readme():
     else: # if the file cannot be found
         handleError(410)
     return
+
+
 
 def runAI(resume, coverletter, name):
     """
@@ -118,7 +136,7 @@ def runAI(resume, coverletter, name):
             
         if not api_key: # Ensure api key is set for safety purposes
             handleError(402)
-            closeApp(root)
+            root.closeApp()
 
         try:
             result = ai.main(name, resume, coverletter, criteria, strength) # Get result of AI script
@@ -179,7 +197,22 @@ def handleError(err, e=None):
     message = errorMessages.get(err)
     logError(e)
     messagebox.showerror("Error", message)
-    
+
+def getPackagedPath(filename):
+        """
+        Gets the path of a file packaged with the application.
+
+        Args:
+            filename (str): Name of the file.
+
+        Returns:
+            str: Path to the file.
+        """
+        if hasattr(sys, '_MEIPASS'): # checks for sys attribute and grabs file packaged with pyinstaller
+            return os.path.join(sys._MEIPASS, filename)
+        else:
+            return os.path.join(os.path.dirname(__file__), filename) # For VSCODE testing
+
 def openLog(): 
     """
     Opens the log file for debugging purposes.
@@ -266,13 +299,14 @@ def run():
                 allPaths.append((nameKey, resumePath, coverPath)) # append path info as tuple
                 
             except Exception:
-                loadingWindow.destroy()
-                handleError(999)
-                root.destroy()
+                root.after(0, loadingWindow.stop)
+                root.after(0, lambda: handleError(999))
+                root.after(0, root.destroy)
                 return
+        
 
-        loadingWindow.destroy() # destroy loading bar
-        showResultWindow(allOut, allPaths) # open results window
+        root.after(0, loadingWindow.stop) # Destroy loading bar
+        root.after(0, lambda: showResultWindow(allOut, allPaths)) # Open results window
 
     
     if listbox.size() == 0: # Make sure there are files in the listbox to process
@@ -283,10 +317,11 @@ def run():
         handleError(404)
         return
     
+    root.withdraw()
     loadingWindow = showLoadingBar() # open loading bar
     pairs = gatherPairs() # create dictionary
 
-    threading.Thread(target=processFiles).start() # New thread for processing so GUI doesn't crash
+    threading.Thread(target=processFiles, daemon=True).start() # New thread for processing so GUI doesn't crash
 
 def logError(error):
     """
@@ -352,38 +387,15 @@ def parseType(filePath):
 
     return docType, nameKey
 
-def closeApp(thread):
-    """Ensures proper cleanup of application"""
-    try:
-        if thread == resultWindow: # Will cause an error if resultWindow hasn't been created yet, so we must try/except it.
-            root.deiconify()
-    except Exception: 
-        if thread == root: # If its root, exit the system so no memory leaks
-            sys.exit(0)
-    finally: # Any other window and we just destroy the passed thread.
-        thread.destroy()
-
-def showLoadingBar():
+def showLoadingBar(parent=None):
     """
     Creates and displays a loading bar window.
 
     Returns:
-        tk.Toplevel: The loading bar window.
+        Window: The loading bar window.
     """
 
-    loadingWindow = tk.Toplevel(root) # Create new toplevel window on root
-    loadingWindow.title("Processing") # Name of window
-    loadingWindow.geometry("300x100") # Size of window
-    loadingWindow.resizable(False, False) # not resizeable in x or y direction
-    loadingWindow.protocol("WM_DELETE_WINDOW", lambda: None) # Don't let the user close it.
-    root.withdraw()
-
-    try:
-        # Get the absolute path to the .ico file
-        iconPath = getPackagedPath("icon.ico")
-        loadingWindow.iconbitmap(iconPath)
-    except Exception:
-        pass # Fallback to default tkinter icon if brightisle icon cant be found
+    loadingWindow = Window("Processing", "300x100", close=False, parent=parent)
 
     label = tk.Label(loadingWindow, text="Processing...") # Processing text
     label.pack(pady=10) # Add y dir padding to label
@@ -392,6 +404,11 @@ def showLoadingBar():
     progress.pack(pady=10, padx=10, fill="x") # Add padding 
     progress.start() # Start loading bar
 
+    def stop():
+        progress.stop()
+        loadingWindow.destroy()
+
+    loadingWindow.stop = stop
     return loadingWindow
 
 def showResultWindow(result, file):
@@ -403,19 +420,9 @@ def showResultWindow(result, file):
         file (list): List of tuples of file paths that correspond to each output.
     """
     global resultWindow
-    # New window
-    resultWindow = tk.Toplevel()
-    resultWindow.title("Screening Results")
-    resultWindow.geometry("600x400")
-    resultWindow.resizable(False, False)
-    resultWindow.protocol("WM_DELETE_WINDOW", lambda: closeApp(resultWindow))
 
-    try:
-        # Get the absolute path to the .ico file
-        iconPath = getPackagedPath("icon.ico")
-        resultWindow.iconbitmap(iconPath)
-    except Exception:
-        pass  # Fallback to default tkinter icon if brightisle icon can't be found
+    resultWindow = Window("Screening Results", parent=root)
+    
 
     # Frame to hold listbox and scroller
     frame = tk.Frame(resultWindow)
@@ -497,18 +504,7 @@ def showResultWindow(result, file):
             detailed, resumePath, coverPath = details_map.get(preview, ("Details not found.", None, None)) # get details from dictionary
 
             # Create a detailed view window
-            detailWindow = tk.Toplevel(resultWindow)
-            detailWindow.title("Detailed Result")
-            detailWindow.geometry("600x400")
-            detailWindow.resizable(True, True)
-            detailWindow.protocol("WM_DELETE_WINDOW", lambda: closeApp(detailWindow))
-            
-            try:
-                # Get the absolute path to the .ico file
-                iconPath = getPackagedPath("icon.ico")
-                detailWindow.iconbitmap(iconPath)
-            except Exception:
-                pass  # Fallback to default tkinter icon if brightisle icon can't be found
+            detailWindow = Window("Detailed Result")
 
             # Scrollbar for detailed content
             scroll = tk.Scrollbar(detailWindow, orient="vertical")
@@ -543,51 +539,6 @@ def showResultWindow(result, file):
     resultsListbox.bind("<Double-1>", showDetails)
     resultsListbox.bind("<Return>", showDetails)
 
-def getMail():
-    """
-    Opens mail window to allow user to automatically download resumes and coverletters.
-    """
-    global mailWindow
-    mailWindow = tk.Toplevel()
-    mailWindow.geometry("300x250")
-    mailWindow.resizable(False, False)
-    mailWindow.protocol("WM_DELETE_WINDOW", lambda: closeApp(mailWindow))
-    
-    try:
-        # Get the absolute path to the .ico file
-        iconPath = getPackagedPath("icon.ico")
-        mailWindow.iconbitmap(iconPath)
-    except Exception:
-        pass # Fallback to default tkinter icon if brightisle icon cant be found
-    
-    # Label to tell user where to share payworks candidates
-    emailLabel = tk.Label(mailWindow, text="Share email: ai@brightisle.ca\n Enter identifier below")
-    emailLabel.pack(pady=5)
-
-    # Textbox for identifier
-    textbox = tk.Text(mailWindow, width=25, height=7)
-    textbox.pack(pady=5, padx=10, side="top")
-
-    # Button to start download
-    downloadButton = tk.Button(mailWindow, text="Download", command=lambda: execMail(textbox))
-    downloadButton.pack(pady=5, padx=10, side="bottom")
-
-def execMail(textbox):
-    """
-    Starts the process of downloading files
-
-    Args: textbox (tkinter.Text obj)
-    """
-    def runmail():
-        mail.main(identifier) # Run mail script with identifier
-        closeApp(loading)
-        closeApp(mailWindow)
-        messagebox.showinfo("Success", "Resumes and Coverletters can be found in your downloads folder.")
-
-    identifier = textbox.get("1.0", tk.END).strip() # get identifier from textbox
-    loading = showLoadingBar() # Show processing loading bar
-    threading.Thread(target=runmail).start() # Start in new thread so GUI doesnt crash
-    
 def main():
     """
     Initialize and launch the BrightIsle CV Screener application.
@@ -596,20 +547,16 @@ def main():
     application. It performs the following tasks:
     - Verifies the existence and validity of the configuration file (config.json),
       and ensures an API key is provided.
-    - Initializes the TkinterDnD root window and configures its layout.
     - Adds widgets for user interaction, including:
         - A text box for entering screening criteria.
         - A listbox for dropping or selecting PDF files to process.
         - A slider to adjust the filter strength for AI screening.
-        - Buttons for accessing help, running the screening, and viewing logs.
-    - Binds actions such as drag-and-drop, file selection, and file deletion 
-      to the appropriate event handlers.
+        - Buttons for accessing help, running the screening and viewing logs.
 
     Notes:
     - If the configuration file is missing or invalid, the user is prompted 
       to set up the necessary API key before proceeding.
-    - The application is terminated if the API key is not provided, except 
-      during the first run.
+    - The application is terminated if the API key is not provided.
 
     Raises:
         None
@@ -621,22 +568,7 @@ def main():
     # Check for API key    
     api_key = checkConfig()
 
-    os.environ['TKDND_LIBRARY'] = getPackagedPath("tkdnd2.9")
-
-    root = tk.Tk()
-
-    root.title("BrightIsle CV Screener")
-    root.geometry("600x400")
-    root.resizable(False, False)
-    root.protocol("WM_DELETE_WINDOW", lambda: closeApp(root))
-
-
-    try:
-        # Get the absolute path to the .ico file
-        iconPath = getPackagedPath("icon.ico")
-        root.iconbitmap(iconPath)
-    except Exception:
-        pass # Fallback to default tkinter icon if brightisle icon cant be found
+    root = Window("Brightisle CV Screener", isRoot=True)
 
     # Create a frame around the window to allow widgets to mesh better
     frame = tk.Frame(root, padx=10, pady=10)
@@ -684,10 +616,6 @@ def main():
     # Add Log button
     logButton = tk.Button(frame, text="Log", command=openLog)
     logButton.grid(column=3, row=0, sticky='nw')
-
-    # Add mail button
-    mailButton = tk.Button(frame, text="Mail", command=getMail)
-    mailButton.grid(column=0, row=0, sticky='nw')
 
     # Configure rows and columns inside the frame
     frame.grid_rowconfigure(0, weight=1)
