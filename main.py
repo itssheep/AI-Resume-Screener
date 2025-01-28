@@ -12,10 +12,10 @@ import pandas as pd
 import ai
 
 
-APP_NAME = "BrightIsle CV Screener"
-APPDATA_DIR = os.path.join(os.getenv("APPDATA"), APP_NAME)
-CONFIG_FILE = os.path.join(APPDATA_DIR, "config.json")
-LOG_FILE = os.path.join(APPDATA_DIR, "log.txt")
+APPNAME = "BrightIsle CV Screener"
+APPDATADIR = os.path.join(os.getenv("APPDATA"), APPNAME)
+CONFIGFILE = os.path.join(APPDATADIR, "config.json")
+LOGFILE = os.path.join(APPDATADIR, "log.txt")
 
 
 class Window(tk.Tk):
@@ -98,10 +98,10 @@ def readme():
     """
     Opens the README.md file in the default web browser.
     """
-    readme_path = os.path.join(APPDATA_DIR, "README.md") # Get file location
+    readmePath = os.path.join(APPDATADIR, "README.md") # Get file location
     
-    if os.path.exists(readme_path): # If it's found
-        webbrowser.open(f"file://{readme_path}")
+    if os.path.exists(readmePath): # If it's found
+        webbrowser.open(f"file://{readmePath}")
     else: # if the file cannot be found
         handleError(410)
     return
@@ -134,7 +134,7 @@ def runAI(resume, coverletter, name):
         elif coverletter is None: # Same as resume
             coverletter = "None"
             
-        if not api_key: # Ensure api key is set for safety purposes
+        if not apiKey: # Ensure api key is set for safety purposes
             handleError(402)
             root.closeApp()
 
@@ -190,7 +190,7 @@ def handleError(err, e=None):
         408 : "Invalid API key entered, please check your key and try again.",
         409 : "Please add atleast one PDF file to process.",
         410 : "README.MD file not found.",
-        411 : f"Failed to process file is the pdf scanned or empty?",
+        411 : "Failed to process file, is the pdf scanned or empty?",
         999 : "Unknown Error, Please contact support",
     }
    
@@ -219,7 +219,7 @@ def openLog():
     """
 
     try:
-        file = os.path.join(APPDATA_DIR, "log.txt") # Find log file in appdata dir
+        file = os.path.join(APPDATADIR, "log.txt") # Find log file in appdata dir
         if os.path.exists(file):
             os.startfile(file)
 
@@ -235,34 +235,34 @@ def checkConfig():
         str: API key 
     """
 
-    os.makedirs(APPDATA_DIR, exist_ok=True) # Create appdata directory
+    os.makedirs(APPDATADIR, exist_ok=True) # Create appdata directory
 
-    if not os.path.exists(CONFIG_FILE):
+    if not os.path.exists(CONFIGFILE):
         # First run: Create the config & log file and prompt user to set up their API key.
-        with open(CONFIG_FILE, "w") as file:
+        with open(CONFIGFILE, "w") as file:
             json.dump({"OPENAI_API_KEY": ""}, file) # dump our json contents into config
             
-        logFile = os.path.join(APPDATA_DIR, "log.txt") # Create log file
+        logFile = os.path.join(APPDATADIR, "log.txt") # Create log file
         with open(logFile, "w") as log: # Default write-to log
             log.write("Error log file, for developer use.\n")
 
-        readmeDest = os.path.join(APPDATA_DIR, "README.md") # readme dest
+        readmeDest = os.path.join(APPDATADIR, "README.md") # readme dest
         readmeSRC = getPackagedPath("README.md") # unpack file
         with open(readmeSRC, "r", encoding="utf-8") as src, open(readmeDest, "w", encoding="utf-8") as dest:
             dest.write(src.read())
 
-        messagebox.showinfo("Setup Required", f"Config file created at {CONFIG_FILE}. Please add your OpenAI API key.")
-        sys.exit()
+        messagebox.showinfo("Setup Required", f"Config file created at {CONFIGFILE}. Please add your OpenAI API key.")
+        sys.exit(0)
     else:
         # Regular validation
-        with open(CONFIG_FILE, "r") as file:
+        with open(CONFIGFILE, "r") as file:
             try:
                 config = json.load(file)
-                api_key = config.get("OPENAI_API_KEY", "").strip() # read api key from json
-                if not api_key: # ensure api key is there
+                apiKey = config.get("OPENAI_API_KEY", "").strip() # read api key from json
+                if not apiKey: # ensure api key is there
                     handleError(402)
                     return 
-                return api_key
+                return apiKey
             except json.JSONDecodeError: # if json cannot be loaded show an error
                 handleError(403)
                 return 
@@ -334,11 +334,11 @@ def logError(error):
         error (Exception): The error to log.
     """
     timestamp = datetime.now().strftime("%d-%m-%Y %H:%M:%S") # records the date and time the error was found
-    with open(LOG_FILE, "a") as file:
+    with open(LOGFILE, "a") as file:
         file.write(f"\n[{timestamp}] Error: {error}\n")
     return
   
-def pdfToPlaintext(file_path):
+def pdfToPlaintext(filePath):
     """
     Converts a PDF file to plaintext.
 
@@ -349,11 +349,11 @@ def pdfToPlaintext(file_path):
         str: Extracted plaintext or None if the PDF cannot be processed.
     """
     try:
-        if file_path is None:  # Ensure file path is provided
+        if filePath is None:  # Ensure file path is provided
             return None
         
         # Extract text from the PDF file using pdfminer
-        text = extract_text(file_path)
+        text = extract_text(filePath)
         
         return text.strip() if text else None
     
@@ -366,7 +366,7 @@ def parseType(filePath):
     Given some file path, parses the type of file and matches to the other.
     
     returns:
-        docType   "Resume" or "Coverletter"
+        docType   "Resume" or "CoverLetter"
         nameKey   "name of person" (for dictionary key)
     """
     filename = os.path.basename(filePath) 
@@ -440,7 +440,7 @@ def showResultWindow(result, file):
     scrollbar.config(command=resultsListbox.yview)
 
     # Dictionary to map previews to detailed content
-    details_map = {}
+    detailsMap = {}
 
     # List to hold results for sorting
     results = []
@@ -450,12 +450,12 @@ def showResultWindow(result, file):
         name, resumePath, coverPath = doctuple
 
         # Extract the score using a regex
-        score_pattern = re.search(r"Score:\s*(\d+)", aioutput)
-        score = int(score_pattern.group(1)) if score_pattern else -1
+        scorePattern = re.search(r"Score:\s*(\d+)", aioutput)
+        score = int(scorePattern.group(1)) if scorePattern else -1
 
         # Extract the approval status using a regex
-        app_pattern = re.search(r"Rationale:\s*(Approved|Rejected)\.?", aioutput)
-        approval = app_pattern.group(1) if app_pattern else "Unknown"
+        appPattern = re.search(r"Rationale:\s*(Approved|Rejected)\.?", aioutput)
+        approval = appPattern.group(1) if appPattern else "Unknown"
 
         # Create a preview with the file name, score, and approval status
         preview = f"{name} | {score} | {approval}"
@@ -468,25 +468,25 @@ def showResultWindow(result, file):
 
     # Populate the listbox and details map
     for score, preview, aioutput, resumePath, coverPath in results:
-        details_map[preview] = (aioutput, resumePath, coverPath)  # Include paths in map
+        detailsMap[preview] = (aioutput, resumePath, coverPath)  # Include paths in map
         resultsListbox.insert(tk.END, preview)
 
     # Function to export listbox data to Excel
     def export_to_excel():
         data = []
         for _, preview, aioutput, _, _ in results:
-            name, score_str, approval = preview.split(" | ")
+            name, scoreStr, approval = preview.split(" | ")
             rationale = aioutput.strip()
-            data.append([name, score_str, approval, rationale]) # Grab all data from output and add to list
+            data.append([name, scoreStr, approval, rationale]) # Grab all data from output and add to list
 
         df = pd.DataFrame(data, columns=["Name", "Score", "Approval", "Rationale"]) # Add to excel file using pandas
-        save_path = filedialog.asksaveasfilename( # open file dialog to save
+        savePath = filedialog.asksaveasfilename( # open file dialog to save
             defaultextension=".xlsx",
             filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],
         )
-        if save_path: # If the file is saved
-            df.to_excel(save_path, index=False)
-            messagebox.showinfo("Export Successful", f"Results exported to {save_path}")
+        if savePath: # If the file is saved
+            df.to_excel(savePath, index=False)
+            messagebox.showinfo("Export Successful", f"Results exported to {savePath}")
 
     # Function to show detailed view with buttons
     def showDetails(event):
@@ -501,7 +501,7 @@ def showResultWindow(result, file):
         selected = resultsListbox.curselection()
         if selected:
             preview = resultsListbox.get(selected[0]) # get current selected item
-            detailed, resumePath, coverPath = details_map.get(preview, ("Details not found.", None, None)) # get details from dictionary
+            detailed, resumePath, coverPath = detailsMap.get(preview, ("Details not found.", None, None)) # get details from dictionary
 
             # Create a detailed view window
             detailWindow = Window("Detailed Result")
@@ -538,7 +538,7 @@ def showResultWindow(result, file):
     # Bind double-click and Enter to show details
     resultsListbox.bind("<Double-1>", showDetails)
     resultsListbox.bind("<Return>", showDetails)
-
+    
 def main():
     """
     Initialize and launch the BrightIsle CV Screener application.
@@ -551,7 +551,7 @@ def main():
         - A text box for entering screening criteria.
         - A listbox for dropping or selecting PDF files to process.
         - A slider to adjust the filter strength for AI screening.
-        - Buttons for accessing help, running the screening and viewing logs.
+        - Buttons for accessing help, running the screening, and viewing logs.
 
     Notes:
     - If the configuration file is missing or invalid, the user is prompted 
@@ -563,10 +563,10 @@ def main():
     """
 
     # Allow access to all variables that need to be read in other functions. They are never written in other functions and im too lazy to modify args for pbv.
-    global root, api_key, listbox, userCriteria, strengthSlider 
+    global root, apiKey, listbox, userCriteria, strengthSlider 
 
     # Check for API key    
-    api_key = checkConfig()
+    apiKey = checkConfig()
 
     root = Window("Brightisle CV Screener", isRoot=True)
 
@@ -594,7 +594,6 @@ def main():
     listbox.bind("<Double-1>", lambda event: drop())
     listbox.bind("<Delete>", delete)
     listbox.bind("<BackSpace>", delete)
-
     
     # Add slider for how rigorous the AI will be
     strengthSlider = tk.Scale(frame, from_=1, to=5, orient="horizontal")
