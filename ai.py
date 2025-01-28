@@ -6,10 +6,10 @@ import json
 import re
 
 
-APP_NAME = "BrightIsle CV Screener"
-APPDATA_DIR = os.path.join(os.getenv("APPDATA"), APP_NAME)
-CONFIG_FILE = os.path.join(APPDATA_DIR, "config.json")
-LOG_FILE = os.path.join(APPDATA_DIR, "log.txt")
+APPNAME = "BrightIsle CV Screener"
+APPDATADIR = os.path.join(os.getenv("APPDATA"), APPNAME)
+CONFIGFILE = os.path.join(APPDATADIR, "config.json")
+LOGFILE = os.path.join(APPDATADIR, "log.txt")
 
 
 def logError(error):
@@ -23,10 +23,9 @@ def logError(error):
         error (Exception): The error to log.
     """
     timestamp = datetime.now().strftime("%d-%m-%Y %H:%M:%S") # records the date and time the error was found
-    with open(LOG_FILE, "a") as file:
+    with open(LOGFILE, "a") as file:
         file.write(f"\n[{timestamp}] Error: {error}\n")
     return
-
 
 def handleError(error):
     """
@@ -55,8 +54,18 @@ def handleError(error):
             logError(error) # Catch-all OpenAI Errors
             sys.exit(999)
 
-
 def sanitizeText(text, name):
+    """
+    Sanitizes and removes personal details from resumes and coverletters
+    
+    Args: text (string) Resume/coverletter plaintext.
+          name (string) Name of applicant
+    
+    Returns: text (string) sanitized resume text.
+    """
+    if text == None or text == "None":
+        return "None"
+
     first, last = name.split('-')
 
     firstNamePattern = re.compile(rf'\b{re.escape(first)}\b', re.IGNORECASE)
@@ -73,25 +82,13 @@ def sanitizeText(text, name):
         (\d{4})                        # Last 4 digits
     ''', re.VERBOSE)
 
-    addressPattern = re.compile(r'''
-        \b\d+\s+                       # House number (e.g., 123)
-        [A-Za-z0-9\s]+                 # Street name (e.g., Elm Street)
-        (?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Lane|Ln|Drive|Dr)?  # Street type (optional)
-        ,?\s+                          # Optional comma and space
-        [A-Za-z\s]+                    # City name (e.g., Springfield)
-        ,?\s+                          # Optional comma and space
-        [A-Z]{2}                       # State abbreviation (e.g., IL)
-        \s+\d{5}                       # ZIP code (e.g., 62701)
-    ''', re.VERBOSE | re.IGNORECASE)
-
+    
     text = firstNamePattern.sub('[FIRST]', text)
     text = lastNamePattern.sub('[LAST]', text)
     text = emailPattern.sub('[EMAIL]', text)
     text = phonePattern.sub('[PHONE]', text)
-    text = addressPattern.sub('[ADDRESS]', text)
     return text
-
-
+    
 def main(name, resume, cover, criteria, strength):
     """
     The main function orchestrates the resume evaluation process.
@@ -122,21 +119,21 @@ def main(name, resume, cover, criteria, strength):
     """
     try:
 
-        with open(CONFIG_FILE, "r") as file: # get API key
+        with open(CONFIGFILE, "r") as file: # get API key
             try:
                 config = json.load(file)
-                api_key = config.get("OPENAI_API_KEY", "").strip()
-                if not api_key: # ensure api key is there
+                apiKey = config.get("OPENAI_API_KEY", "").strip()
+                if not apiKey: # ensure api key is there
                     handleError(999)
                     return 
             except Exception:
                 handleError(999)
                 return
-            
+        
+
         cover = sanitizeText(cover, name)
         resume = sanitizeText(resume, name)
-
-        client = openai.OpenAI(api_key=api_key)    
+        client = openai.OpenAI(api_key=apiKey)    
 
         # AI prompt
         prompt = f"""
